@@ -1,0 +1,214 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Cardea | {{ name }}</title>
+  <style>
+    :root {
+      --banner: #293e40;
+      --nav: #303a46;
+      --nav-text: #c9d1d9;
+      --page: #f1f2f4;
+      --panel: #ffffff;
+      --line: #d6d9dd;
+      --head: #e9ebee;
+      --text: #2b2f33;
+      --muted: #6b737b;
+      --accent: #1f7a6d;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: "Segoe UI", Arial, sans-serif; font-size: 13px; color: var(--text); background: var(--page); }
+
+    header { background: var(--banner); color: #fff; height: 48px; display: flex; align-items: center; padding: 0 16px; gap: 24px; }
+    header .brand { font-size: 17px; font-weight: 600; letter-spacing: .3px; }
+    header .meta { color: #b7c4c5; }
+    header .code { margin-left: auto; background: #1b2b2d; padding: 4px 10px; border-radius: 3px; font-family: Consolas, monospace; }
+
+    .layout { display: flex; min-height: calc(100vh - 48px); }
+    nav { width: 210px; background: var(--nav); padding-top: 8px; flex-shrink: 0; }
+    nav .title { color: #8d99a6; text-transform: uppercase; font-size: 11px; padding: 10px 16px 4px; }
+    nav a { display: block; color: var(--nav-text); text-decoration: none; padding: 7px 16px 7px 24px; }
+    nav a:hover { background: #3b4754; color: #fff; }
+
+    main { flex: 1; padding: 16px; max-width: 1100px; }
+    .panel { background: var(--panel); border: 1px solid var(--line); margin-bottom: 16px; }
+    .panel-head { display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; border-bottom: 1px solid var(--line); background: #fafbfb; }
+    .panel-head h2 { font-size: 14px; margin: 0; font-weight: 600; }
+    .panel-body { padding: 12px; }
+
+    table { width: 100%; border-collapse: collapse; }
+    th { background: var(--head); text-align: left; font-weight: 600; padding: 7px 10px; border-bottom: 1px solid var(--line); }
+    td { padding: 7px 10px; border-bottom: 1px solid #eceef0; vertical-align: middle; }
+    tr:hover td { background: #f6f8f9; }
+    .empty { color: var(--muted); padding: 12px; }
+
+    .row { display: flex; align-items: center; margin-bottom: 8px; }
+    .row label { width: 170px; text-align: right; padding-right: 12px; color: var(--muted); }
+    .row input[type=text] { width: 280px; padding: 5px 7px; border: 1px solid #b9bfc5; border-radius: 2px; font: inherit; }
+    .row input:focus { outline: none; border-color: var(--accent); }
+    .actions { margin-left: 170px; }
+
+    button { font: inherit; padding: 5px 12px; border-radius: 2px; border: 1px solid #b9bfc5; background: #fff; cursor: pointer; }
+    button:hover { background: #f0f2f4; }
+    button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+    button.primary:hover { background: #18645a; }
+
+    .tag { display: inline-block; padding: 1px 7px; border-radius: 9px; font-size: 11px; background: #e4e7ea; color: #4a525a; }
+    .tag.hidden { background: #f3e3d3; color: #7a4a1c; }
+    .mono { font-family: Consolas, monospace; }
+    details summary { cursor: pointer; color: var(--accent); }
+
+    @media (max-width: 700px) {
+      nav { display: none; }
+      .row { flex-direction: column; align-items: flex-start; }
+      .row label { width: auto; text-align: left; }
+      .row input[type=text] { width: 100%; }
+      .actions { margin-left: 0; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <span class="brand">Cardea</span>
+    <span class="meta">Device: {{ name }}</span>
+    <span class="meta">Hub: {{ hub_url }}</span>
+    <span class="code">{{ vault.code or "NOT REGISTERED" }}</span>
+  </header>
+
+  <div class="layout">
+    <nav>
+      <div class="title">Secrets</div>
+      <a href="#secrets">All secrets</a>
+      <a href="#new">New secret</a>
+      <a href="#share">Share secret</a>
+      <div class="title">Access</div>
+      <a href="#groups">Groups</a>
+      <a href="#request">Request a secret</a>
+      <a href="#approvals">My approvals ({{ pending | length }})</a>
+      <div class="title">Governance</div>
+      <a href="#audit">Audit log</a>
+    </nav>
+
+    <main>
+      {% if not vault.code %}
+      <div class="panel">
+        <div class="panel-head"><h2>Device registration</h2></div>
+        <div class="panel-body">
+          <form method="post" action="/register">
+            This device is not paired with the hub yet.
+            <button class="primary">Register device</button>
+          </form>
+        </div>
+      </div>
+      {% endif %}
+
+      <div class="panel" id="secrets">
+        <div class="panel-head"><h2>Secrets (stored on this device only)</h2><span class="tag">{{ vault['keys'] | length }} records</span></div>
+        <table>
+          <tr><th>Name</th><th>Value</th><th>Visibility</th><th>Shared with</th><th>Received from</th><th></th></tr>
+          {% for key_name, key in vault['keys'].items() %}
+          <tr>
+            <td class="mono">{{ key_name }}</td>
+            <td><details><summary>Show</summary><span class="mono">{{ key.value }}</span></details></td>
+            <td>{% if key.hidden %}<span class="tag hidden">Hidden</span>{% else %}<span class="tag">Requestable</span>{% endif %}</td>
+            <td class="mono">{{ key.shared_with | join(', ') or '-' }}</td>
+            <td class="mono">{{ key.get('from', '-') }}</td>
+            <td><form method="post" action="/rotate"><input type="hidden" name="key_name" value="{{ key_name }}"><button>Rotate</button></form></td>
+          </tr>
+          {% else %}
+          <tr><td colspan="6" class="empty">No records to display</td></tr>
+          {% endfor %}
+        </table>
+      </div>
+
+      <div class="panel" id="new">
+        <div class="panel-head"><h2>New secret</h2></div>
+        <div class="panel-body">
+          <form method="post" action="/keys">
+            <div class="row"><label>Name</label><input type="text" name="name" required></div>
+            <div class="row"><label>Value</label><input type="text" name="value" required></div>
+            <div class="row"><label>Hidden</label><input type="checkbox" name="hidden"></div>
+            <div class="actions"><button class="primary">Submit</button></div>
+          </form>
+        </div>
+      </div>
+
+      <div class="panel" id="share">
+        <div class="panel-head"><h2>Share secret</h2></div>
+        <div class="panel-body">
+          <form method="post" action="/share">
+            <div class="row"><label>Secret name</label><input type="text" name="key_name" required></div>
+            <div class="row"><label>Send to</label><input type="text" name="to" placeholder="pairing code or group:name" required></div>
+            <div class="actions"><button class="primary">Send directly</button></div>
+          </form>
+        </div>
+      </div>
+
+      <div class="panel" id="groups">
+        <div class="panel-head"><h2>Groups</h2></div>
+        <div class="panel-body">
+          <form method="post" action="/groups">
+            <div class="row"><label>New group</label><input type="text" name="group" required></div>
+            <div class="actions"><button class="primary">Create (I am admin)</button></div>
+          </form>
+          <br>
+          <form method="post" action="/groups/add">
+            <div class="row"><label>Group</label><input type="text" name="group" required></div>
+            <div class="row"><label>Member pairing code</label><input type="text" name="member" required></div>
+            <div class="actions"><button>Add member</button></div>
+          </form>
+        </div>
+      </div>
+
+      <div class="panel" id="request">
+        <div class="panel-head"><h2>Request a secret</h2></div>
+        <div class="panel-body">
+          <form method="post" action="/request-key">
+            <div class="row"><label>Owner pairing code</label><input type="text" name="owner" required></div>
+            <div class="row"><label>Secret name</label><input type="text" name="key_name" required></div>
+            <div class="actions"><button class="primary">Submit request</button></div>
+          </form>
+        </div>
+      </div>
+
+      <div class="panel" id="approvals">
+        <div class="panel-head"><h2>My approvals</h2></div>
+        <table>
+          <tr><th>Number</th><th>Requested by</th><th>Secret</th><th>Action</th></tr>
+          {% for r in pending %}
+          <tr>
+            <td class="mono">REQ{{ '%05d' % r.id }}</td>
+            <td class="mono">{{ r.requester }}</td>
+            <td class="mono">{{ r.key_name }}</td>
+            <td>
+              <form method="post" action="/answer-request">
+                <input type="hidden" name="id" value="{{ r.id }}">
+                <input type="hidden" name="requester" value="{{ r.requester }}">
+                <input type="hidden" name="key_name" value="{{ r.key_name }}">
+                <button class="primary" name="decision" value="approve">Approve</button>
+                <button name="decision" value="deny">Reject</button>
+              </form>
+            </td>
+          </tr>
+          {% else %}
+          <tr><td colspan="4" class="empty">No records to display</td></tr>
+          {% endfor %}
+        </table>
+      </div>
+
+      <div class="panel" id="audit">
+        <div class="panel-head"><h2>Audit log (from hub, no secret values)</h2></div>
+        <table>
+          <tr><th>Time (UTC)</th><th>Action</th><th>Actor</th><th>Target</th><th>Secret</th></tr>
+          {% for e in audit %}
+          <tr><td>{{ e.time[:19] }}</td><td>{{ e.action }}</td><td class="mono">{{ e.actor }}</td><td class="mono">{{ e.target }}</td><td class="mono">{{ e.key_name }}</td></tr>
+          {% else %}
+          <tr><td colspan="5" class="empty">No records to display</td></tr>
+          {% endfor %}
+        </table>
+      </div>
+    </main>
+  </div>
+</body>
+</html>

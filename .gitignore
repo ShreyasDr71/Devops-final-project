@@ -1,0 +1,15 @@
+__pycache__/
+*.pyc
+.pytest_cache/
+.coverage
+coverage.xml
+*.db
+vault.json
+.venv/
+*.pptx
+*.pem
+.terraform/
+*.tfstate
+*.tfstate.backup
+*.tfvars
+ansible/inventory.ini
