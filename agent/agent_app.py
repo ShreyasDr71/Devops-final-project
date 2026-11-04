@@ -73,7 +73,9 @@ def send_secret(key_name, value, target_code):
     peer = hub("GET", f"/lookup/{target_code}")
     payload = {"sender": vault["code"], "key_name": key_name, "payload": encrypt(target_code, value)}
     try:
-        # 1st choice: straight to the other device's IP
+        # 1st choice: straight to the other device's IP (port 0 = "relay only" client, skip this)
+        if not peer["port"]:
+            raise requests.ConnectionError("relay-only device")
         requests.post(f"http://{peer['ip']}:{peer['port']}/receive", json=payload, timeout=3).raise_for_status()
         action = "share"
     except requests.RequestException:

@@ -88,3 +88,13 @@ def test_check_inbox_stores_relayed_secret():
     with mock.patch.object(agent_app, "hub", return_value={"messages": [message]}):
         agent_app.check_inbox()
     assert agent_app.load_vault()["keys"]["wifi"]["value"] == "pa55"
+
+
+def test_relay_only_peer_skips_direct_send():
+    set_code("ME1234")
+    client.post("/keys", data={"name": "k2", "value": "v2"})
+    with mock.patch.object(agent_app, "hub") as hub, mock.patch.object(agent_app.requests, "post") as post:
+        hub.return_value = {"ip": "1.2.3.4", "port": 0}
+        client.post("/share", data={"key_name": "k2", "to": "PEER99"})
+    post.assert_not_called()
+    assert any(c.args[1] == "/relay/PEER99" for c in hub.call_args_list)
