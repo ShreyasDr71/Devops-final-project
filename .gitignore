@@ -15,3 +15,5 @@ vault.json
 ansible/inventory.ini
 devops/.env
 devops/.sonar_token
+.scannerwork/
+test-results.xml

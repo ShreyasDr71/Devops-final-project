@@ -6,3 +6,4 @@ job-dsl
 credentials-binding
 prometheus
 cloudbees-disk-usage-simple
+junit
