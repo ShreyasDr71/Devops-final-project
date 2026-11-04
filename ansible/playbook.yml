@@ -16,7 +16,9 @@
     - name: github_token
       prompt: GitHub token (read access to the repo)
     - name: admin_password
-      prompt: Admin password for Jenkins, SonarQube and Grafana (12+ chars, upper, lower, digit, symbol)
+      prompt: Admin password for Jenkins and Grafana
+    - name: sonar_password
+      prompt: SonarQube admin password (12+ chars, upper, lower, digit, symbol)
 
   tasks:
     - name: Install Docker, Compose and Git
@@ -84,7 +86,7 @@
             password: admin
             force_basic_auth: true
             body_format: form-urlencoded
-            body: { login: admin, previousPassword: admin, password: "{{ admin_password }}" }
+            body: { login: admin, previousPassword: admin, password: "{{ sonar_password }}" }
             status_code: 204
 
         - name: Generate token for Jenkins
@@ -92,7 +94,7 @@
             url: http://localhost:9000/api/user_tokens/generate
             method: POST
             user: admin
-            password: "{{ admin_password }}"
+            password: "{{ sonar_password }}"
             force_basic_auth: true
             body_format: form-urlencoded
             body: { name: jenkins }

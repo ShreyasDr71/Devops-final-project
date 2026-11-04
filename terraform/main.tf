@@ -1,7 +1,6 @@
 terraform {
   required_providers {
-    aws   = { source = "hashicorp/aws", version = "~> 5.0" }
-    local = { source = "hashicorp/local", version = "~> 2.0" }
+    aws = { source = "hashicorp/aws", version = "~> 5.0" }
   }
 }
 
@@ -10,16 +9,6 @@ provider "aws" {
 }
 
 data "aws_caller_identity" "me" {}
-
-# Latest Ubuntu 24.04 image
-data "aws_ami" "ubuntu" {
-  most_recent = true
-  owners      = ["099720109477"] # Canonical
-  filter {
-    name   = "name"
-    values = ["ubuntu/images/hvm-ssd-gp3/ubuntu-noble-24.04-amd64-server-*"]
-  }
-}
 
 # ---------- Network: which ports are open ----------
 
@@ -85,19 +74,24 @@ resource "aws_iam_instance_profile" "cardea" {
 
 # ---------- The server ----------
 
+# The server was launched from the AWS console, so Terraform adopts it instead of creating a new one
+import {
+  to = aws_instance.cardea
+  id = var.instance_id
+}
+
 resource "aws_instance" "cardea" {
-  ami                    = data.aws_ami.ubuntu.id
+  ami                    = var.ami
   instance_type          = var.instance_type
   key_name               = var.key_name
   vpc_security_group_ids = [aws_security_group.cardea.id]
   iam_instance_profile   = aws_iam_instance_profile.cardea.name
 
-  root_block_device {
-    volume_size = 30 # GB, free tier limit
-    volume_type = "gp3"
-  }
-
   tags = { Name = "cardea-server" }
+
+  lifecycle {
+    ignore_changes = [ami, root_block_device]
+  }
 }
 
 # Fixed public IP so devices and Jenkins always use the same address
@@ -158,14 +152,4 @@ resource "aws_cloudtrail" "cardea" {
   name           = "cardea-trail"
   s3_bucket_name = aws_s3_bucket.trail.id
   depends_on     = [aws_s3_bucket_policy.trail]
-}
-
-# ---------- Hand the server over to Ansible ----------
-
-resource "local_file" "inventory" {
-  filename = "${path.module}/../ansible/inventory.ini"
-  content  = <<-EOT
-    [cardea]
-    ${aws_eip.cardea.public_ip} ansible_user=ubuntu ansible_ssh_private_key_file=${var.private_key_path}
-  EOT
 }

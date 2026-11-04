@@ -8,13 +8,24 @@ variable "instance_type" {
   default     = "m7i-flex.large"
 }
 
+variable "instance_id" {
+  description = "The EC2 instance launched from the console"
+  default     = "i-00759236612560d57"
+}
+
+variable "ami" {
+  description = "Image the instance was launched from (Ubuntu 26.04)"
+  default     = "ami-0c7632fb77f35db43"
+}
+
 variable "key_name" {
-  description = "Name of the EC2 key pair you created in the AWS console (the .pem file)"
+  description = "Name of the EC2 key pair (the .pem file)"
+  default     = "devops-project"
 }
 
 variable "private_key_path" {
   description = "Path to your .pem file, written into the Ansible inventory"
-  default     = "~/.ssh/cardea.pem"
+  default     = "~/.ssh/devops-project.pem"
 }
 
 variable "my_ip" {
