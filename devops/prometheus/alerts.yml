@@ -1,0 +1,20 @@
+groups:
+  - name: cardea
+    rules:
+      - alert: HubDown
+        expr: up{job="cardea-hub"} == 0
+        for: 1m
+        annotations:
+          summary: "Cardea hub is not responding"
+
+      - alert: HighCpu
+        expr: 100 - avg(rate(node_cpu_seconds_total{mode="idle"}[2m])) * 100 > 80
+        for: 5m
+        annotations:
+          summary: "Server CPU above 80% for 5 minutes"
+
+      - alert: LowDisk
+        expr: node_filesystem_avail_bytes{mountpoint="/"} / node_filesystem_size_bytes{mountpoint="/"} < 0.15
+        for: 5m
+        annotations:
+          summary: "Less than 15% disk space left"

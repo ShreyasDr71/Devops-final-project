@@ -1,0 +1,27 @@
+global:
+  scrape_interval: 15s
+
+rule_files:
+  - alerts.yml
+
+scrape_configs:
+  - job_name: cardea-hub
+    static_configs:
+      - targets: ["hub:5000"]
+
+  - job_name: cardea-devices
+    static_configs:
+      - targets: ["agent-a:5001", "agent-b:5002"]
+
+  - job_name: jenkins
+    metrics_path: /prometheus/
+    static_configs:
+      - targets: ["jenkins:8080"]
+
+  - job_name: server
+    static_configs:
+      - targets: ["node-exporter:9100"]
+
+  - job_name: containers
+    static_configs:
+      - targets: ["cadvisor:8080"]

@@ -50,6 +50,9 @@
         src: "{{ playbook_dir }}/../devops/"
         dest: "{{ tools_dir }}/"
 
+    - name: Create the shared Docker network
+      ansible.builtin.shell: docker network inspect devops >/dev/null 2>&1 || docker network create devops
+
     # ---------- SonarQube: start it, set the password, create a token for Jenkins ----------
 
     - name: Start SonarQube

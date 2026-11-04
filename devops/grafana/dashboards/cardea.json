@@ -1,0 +1,57 @@
+{
+  "title": "Cardea Overview",
+  "uid": "cardea",
+  "schemaVersion": 39,
+  "refresh": "30s",
+  "time": { "from": "now-6h", "to": "now" },
+  "panels": [
+    {
+      "type": "stat", "title": "Hub status", "gridPos": { "x": 0, "y": 0, "w": 6, "h": 4 },
+      "targets": [{ "expr": "up{job=\"cardea-hub\"}" }],
+      "fieldConfig": { "defaults": {
+        "mappings": [{ "type": "value", "options": { "0": { "text": "DOWN", "color": "red" }, "1": { "text": "UP", "color": "green" } } }]
+      } }
+    },
+    {
+      "type": "stat", "title": "Devices online", "gridPos": { "x": 6, "y": 0, "w": 6, "h": 4 },
+      "targets": [{ "expr": "sum(up{job=\"cardea-devices\"})" }]
+    },
+    {
+      "type": "stat", "title": "Jenkins builds (success / failed)", "gridPos": { "x": 12, "y": 0, "w": 12, "h": 4 },
+      "targets": [
+        { "expr": "sum(default_jenkins_builds_success_build_count_total)", "legendFormat": "success" },
+        { "expr": "sum(default_jenkins_builds_failed_build_count_total)", "legendFormat": "failed" }
+      ]
+    },
+    {
+      "type": "timeseries", "title": "Audit events by action", "gridPos": { "x": 0, "y": 4, "w": 12, "h": 8 },
+      "targets": [{ "expr": "sum by (action) (increase(cardea_audit_events_total[5m]))", "legendFormat": "{{action}}" }]
+    },
+    {
+      "type": "timeseries", "title": "Secrets sent / received", "gridPos": { "x": 12, "y": 4, "w": 12, "h": 8 },
+      "targets": [
+        { "expr": "sum(increase(cardea_secrets_sent_total[5m]))", "legendFormat": "sent" },
+        { "expr": "sum(increase(cardea_secrets_received_total[5m]))", "legendFormat": "received" }
+      ]
+    },
+    {
+      "type": "timeseries", "title": "Server CPU %", "gridPos": { "x": 0, "y": 12, "w": 8, "h": 8 },
+      "fieldConfig": { "defaults": { "unit": "percent", "max": 100, "min": 0 } },
+      "targets": [{ "expr": "100 - avg(rate(node_cpu_seconds_total{mode=\"idle\"}[1m])) * 100", "legendFormat": "cpu" }]
+    },
+    {
+      "type": "timeseries", "title": "Server memory used %", "gridPos": { "x": 8, "y": 12, "w": 8, "h": 8 },
+      "fieldConfig": { "defaults": { "unit": "percent", "max": 100, "min": 0 } },
+      "targets": [{ "expr": "(1 - node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes) * 100", "legendFormat": "memory" }]
+    },
+    {
+      "type": "timeseries", "title": "Memory per container", "gridPos": { "x": 16, "y": 12, "w": 8, "h": 8 },
+      "fieldConfig": { "defaults": { "unit": "bytes" } },
+      "targets": [{ "expr": "sum by (name) (container_memory_usage_bytes{name!=\"\"})", "legendFormat": "{{name}}" }]
+    },
+    {
+      "type": "timeseries", "title": "Hub requests per endpoint", "gridPos": { "x": 0, "y": 20, "w": 24, "h": 8 },
+      "targets": [{ "expr": "sum by (endpoint) (rate(cardea_hub_requests_total[5m]))", "legendFormat": "{{endpoint}}" }]
+    }
+  ]
+}

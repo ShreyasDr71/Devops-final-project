@@ -1,0 +1,7 @@
+apiVersion: 1
+providers:
+  - name: cardea
+    folder: Cardea
+    type: file
+    options:
+      path: /var/lib/grafana/dashboards
