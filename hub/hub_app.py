@@ -5,6 +5,7 @@
 import os
 import secrets
 import sqlite3
+import time
 from datetime import datetime, timezone
 
 from flask import Flask, jsonify, request
@@ -30,6 +31,7 @@ def init_db():
         conn.execute("CREATE TABLE IF NOT EXISTS devices (code TEXT PRIMARY KEY, name TEXT, ip TEXT, port INTEGER)")
         conn.execute("CREATE TABLE IF NOT EXISTS groups_ (name TEXT PRIMARY KEY, admin TEXT)")
         conn.execute("CREATE TABLE IF NOT EXISTS members (grp TEXT, code TEXT)")
+        conn.execute("CREATE TABLE IF NOT EXISTS contacts (owner TEXT, peer TEXT)")
         conn.execute(
             "CREATE TABLE IF NOT EXISTS requests "
             "(id INTEGER PRIMARY KEY AUTOINCREMENT, requester TEXT, owner TEXT, key_name TEXT, status TEXT)"
@@ -84,6 +86,57 @@ def lookup(code):
     return jsonify(dict(row))
 
 
+# ---------- Pairing with a short-lived PIN ----------
+# Device A asks for a PIN, device B types it in, and both become contacts.
+
+PINS = {}  # pin -> (device code, expiry time); memory only
+PIN_LIFETIME = 600  # seconds
+
+
+@app.post("/pair/start")
+def pair_start():
+    code = request.get_json()["code"]
+    pin = f"{secrets.randbelow(1_000_000):06d}"
+    PINS[pin] = (code, time.time() + PIN_LIFETIME)
+    return jsonify(pin=pin, expires_in=PIN_LIFETIME)
+
+
+@app.post("/pair/join")
+def pair_join():
+    data = request.get_json()
+    owner, expires = PINS.get(data["pin"], (None, 0))
+    if owner is None or time.time() > expires:
+        return jsonify(error="This PIN is wrong or has expired. Ask for a new one."), 400
+    if owner == data["code"]:
+        return jsonify(error="You can't pair a device with itself."), 400
+    del PINS[data["pin"]]
+    with db() as conn:
+        for a, b in ((owner, data["code"]), (data["code"], owner)):
+            if not conn.execute("SELECT 1 FROM contacts WHERE owner = ? AND peer = ?", (a, b)).fetchone():
+                conn.execute("INSERT INTO contacts VALUES (?, ?)", (a, b))
+    log_event(data["code"], owner, "-", "pair")
+    return jsonify(ok=True)
+
+
+@app.get("/contacts/<code>")
+def contacts(code):
+    with db() as conn:
+        rows = conn.execute(
+            "SELECT d.code, d.name FROM contacts c JOIN devices d ON d.code = c.peer WHERE c.owner = ?", (code,)
+        ).fetchall()
+    return jsonify(contacts=[dict(r) for r in rows])
+
+
+@app.post("/contacts/<code>/remove")
+def remove_contact(code):
+    peer = request.get_json()["peer"]
+    with db() as conn:
+        conn.execute("DELETE FROM contacts WHERE (owner = ? AND peer = ?) OR (owner = ? AND peer = ?)",
+                     (code, peer, peer, code))
+    log_event(code, peer, "-", "unpair")
+    return jsonify(ok=True)
+
+
 # ---------- Groups ----------
 
 @app.post("/groups")
@@ -106,6 +159,15 @@ def add_member(name):
         conn.execute("INSERT INTO members VALUES (?, ?)", (name, data["member"]))
     log_event(data["admin"], data["member"], "-", f"add_to_group:{name}")
     return jsonify(ok=True)
+
+
+@app.get("/groups/of/<code>")
+def groups_of(code):
+    with db() as conn:
+        rows = conn.execute(
+            "SELECT g.name, g.admin FROM groups_ g JOIN members m ON m.grp = g.name WHERE m.code = ?", (code,)
+        ).fetchall()
+    return jsonify(groups=[{"name": r["name"], "is_admin": r["admin"] == code} for r in rows])
 
 
 @app.get("/groups/<name>/members")
@@ -168,6 +230,28 @@ def relay_take(code):
 def add_audit():
     data = request.get_json()
     log_event(data["actor"], data["target"], data["key_name"], data["action"])
+    return jsonify(ok=True)
+
+
+@app.get("/audit/<code>")
+def device_audit(code):
+    # Only the events this device took part in
+    with db() as conn:
+        rows = conn.execute(
+            "SELECT * FROM audit WHERE actor = ? OR target = ? ORDER BY time DESC LIMIT 100", (code, code)
+        ).fetchall()
+    return jsonify(events=[dict(r) for r in rows])
+
+
+@app.post("/devices/<code>/remove")
+def remove_device(code):
+    # "Forget this device": drop it and its pairings
+    with db() as conn:
+        conn.execute("DELETE FROM devices WHERE code = ?", (code,))
+        conn.execute("DELETE FROM contacts WHERE owner = ? OR peer = ?", (code, code))
+        conn.execute("DELETE FROM members WHERE code = ?", (code,))
+    INBOX.pop(code, None)
+    log_event(code, "-", "-", "forget_device")
     return jsonify(ok=True)
 
 
