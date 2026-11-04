@@ -1,0 +1,141 @@
+# Configures the EC2 server created by Terraform.
+# Run from Linux/WSL:  ansible-playbook -i inventory.ini playbook.yml
+- name: Set up the Cardea server
+  hosts: cardea
+  become: true
+
+  vars:
+    repo_url: https://github.com/ShreyasDr71/Devops-final-project.git
+    aws_region: ap-south-1
+    tools_dir: /opt/devops
+
+  vars_prompt:
+    - name: github_user
+      prompt: GitHub username
+      private: false
+    - name: github_token
+      prompt: GitHub token (read access to the repo)
+    - name: admin_password
+      prompt: Admin password for Jenkins, SonarQube and Grafana (12+ chars, upper, lower, digit, symbol)
+
+  tasks:
+    - name: Install Docker, Compose and Git
+      ansible.builtin.apt:
+        name: [docker.io, docker-compose-v2, git]
+        update_cache: true
+
+    - name: Let the ubuntu user run docker
+      ansible.builtin.user:
+        name: ubuntu
+        groups: docker
+        append: true
+
+    - name: Kernel settings SonarQube needs
+      ansible.posix.sysctl:
+        name: "{{ item.name }}"
+        value: "{{ item.value }}"
+      loop:
+        - { name: vm.max_map_count, value: "524288" }
+        - { name: fs.file-max, value: "131072" }
+
+    - name: Jenkins home folder (owned by the jenkins user, uid 1000)
+      ansible.builtin.file:
+        path: /var/jenkins_home
+        state: directory
+        owner: "1000"
+        group: "1000"
+
+    - name: Copy the DevOps tools stack
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/../devops/"
+        dest: "{{ tools_dir }}/"
+
+    # ---------- SonarQube: start it, set the password, create a token for Jenkins ----------
+
+    - name: Start SonarQube
+      ansible.builtin.command: docker compose up -d sonarqube
+      args:
+        chdir: "{{ tools_dir }}"
+
+    - name: Wait until SonarQube is up
+      ansible.builtin.uri:
+        url: http://localhost:9000/api/system/status
+      register: sonar
+      until: sonar.json is defined and sonar.json.status == "UP"
+      retries: 60
+      delay: 10
+
+    - name: Check if a Sonar token already exists
+      ansible.builtin.stat:
+        path: "{{ tools_dir }}/.sonar_token"
+      register: token_file
+
+    - name: Change SonarQube admin password and create a token
+      when: not token_file.stat.exists
+      block:
+        - name: Change default admin password
+          ansible.builtin.uri:
+            url: http://localhost:9000/api/users/change_password
+            method: POST
+            user: admin
+            password: admin
+            force_basic_auth: true
+            body_format: form-urlencoded
+            body: { login: admin, previousPassword: admin, password: "{{ admin_password }}" }
+            status_code: 204
+
+        - name: Generate token for Jenkins
+          ansible.builtin.uri:
+            url: http://localhost:9000/api/user_tokens/generate
+            method: POST
+            user: admin
+            password: "{{ admin_password }}"
+            force_basic_auth: true
+            body_format: form-urlencoded
+            body: { name: jenkins }
+          register: new_token
+
+        - name: Save the token
+          ansible.builtin.copy:
+            content: "{{ new_token.json.token }}"
+            dest: "{{ tools_dir }}/.sonar_token"
+            mode: "0600"
+
+    - name: Read the Sonar token
+      ansible.builtin.slurp:
+        src: "{{ tools_dir }}/.sonar_token"
+      register: sonar_token
+
+    # ---------- Everything else ----------
+
+    - name: Find the docker group id
+      ansible.builtin.getent:
+        database: group
+        key: docker
+
+    - name: Write settings for the tools stack
+      ansible.builtin.copy:
+        dest: "{{ tools_dir }}/.env"
+        mode: "0600"
+        content: |
+          SERVER_IP={{ ansible_host }}
+          AWS_REGION={{ aws_region }}
+          DOCKER_GID={{ getent_group.docker[1] }}
+          REPO_URL={{ repo_url }}
+          GITHUB_USER={{ github_user }}
+          GITHUB_TOKEN={{ github_token }}
+          ADMIN_PASSWORD={{ admin_password }}
+          SONAR_TOKEN={{ sonar_token.content | b64decode }}
+
+    - name: Start all DevOps tools
+      ansible.builtin.command: docker compose up -d --build
+      args:
+        chdir: "{{ tools_dir }}"
+
+    - name: Wait for Jenkins
+      ansible.builtin.uri:
+        url: http://localhost:8080/login
+      register: jenkins
+      until: jenkins.status == 200
+      retries: 30
+      delay: 10

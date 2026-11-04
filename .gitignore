@@ -13,3 +13,5 @@ vault.json
 *.tfstate.backup
 *.tfvars
 ansible/inventory.ini
+devops/.env
+devops/.sonar_token

@@ -1,0 +1,31 @@
+# DevOps tools stack, started on the EC2 server by Ansible.
+services:
+  jenkins:
+    build: ./jenkins
+    ports:
+      - "8080:8080"
+    env_file: .env
+    volumes:
+      # Same path on host and in container, so "docker run -v $WORKSPACE:..." works from pipelines
+      - /var/jenkins_home:/var/jenkins_home
+      - /var/run/docker.sock:/var/run/docker.sock
+    group_add:
+      - "${DOCKER_GID}"
+    restart: unless-stopped
+
+  sonarqube:
+    image: sonarqube:10.7.0-community
+    ports:
+      - "9000:9000"
+    volumes:
+      - sonar-data:/opt/sonarqube/data
+      - sonar-extensions:/opt/sonarqube/extensions
+    restart: unless-stopped
+
+volumes:
+  sonar-data:
+  sonar-extensions:
+
+networks:
+  default:
+    name: devops

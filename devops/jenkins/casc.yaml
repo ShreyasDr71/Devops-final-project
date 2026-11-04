@@ -1,0 +1,55 @@
+# Values like ${ADMIN_PASSWORD} come from /opt/devops/.env, written by Ansible
+jenkins:
+  systemMessage: "Cardea CI/CD"
+  numExecutors: 2
+  securityRealm:
+    local:
+      allowsSignup: false
+      users:
+        - id: admin
+          password: ${ADMIN_PASSWORD}
+  authorizationStrategy:
+    loggedInUsersCanDoAnything:
+      allowAnonymousRead: false
+
+unclassified:
+  location:
+    url: http://${SERVER_IP}:8080/
+
+credentials:
+  system:
+    domainCredentials:
+      - credentials:
+          - usernamePassword:
+              scope: GLOBAL
+              id: github
+              username: ${GITHUB_USER}
+              password: ${GITHUB_TOKEN}
+          - string:
+              scope: GLOBAL
+              id: sonar-token
+              secret: ${SONAR_TOKEN}
+
+jobs:
+  - script: >
+      pipelineJob('cardea') {
+        description('Cardea build: scan, test, analyse, build, deploy')
+        properties {
+          pipelineTriggers {
+            triggers {
+              pollSCM { scmpoll_spec('H/2 * * * *') }
+            }
+          }
+        }
+        definition {
+          cpsScm {
+            scm {
+              git {
+                remote { url('${REPO_URL}'); credentials('github') }
+                branch('*/main')
+              }
+            }
+            scriptPath('Jenkinsfile')
+          }
+        }
+      }
