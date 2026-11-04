@@ -3,6 +3,7 @@ import tempfile
 from unittest import mock
 
 os.environ["VAULT_FILE"] = os.path.join(tempfile.mkdtemp(), "vault.json")
+os.environ["POLL_SECONDS"] = "0"  # no background thread in tests
 
 import agent_app  # noqa: E402
 
@@ -67,3 +68,23 @@ def test_home_page_works_when_hub_is_offline():
     page = client.get("/")
     assert page.status_code == 200
     assert b"db_pass" in page.data
+
+
+def test_unreachable_peer_falls_back_to_hub_relay():
+    set_code("ME1234")
+    client.post("/keys", data={"name": "token", "value": "t0k"})
+    with mock.patch.object(agent_app, "hub") as hub, mock.patch.object(agent_app.requests, "post") as post:
+        hub.return_value = {"ip": "10.9.9.9", "port": 5001}
+        post.side_effect = agent_app.requests.ConnectionError()
+        client.post("/share", data={"key_name": "token", "to": "PEER99"})
+
+    relay_call = [c for c in hub.call_args_list if c.args[1] == "/relay/PEER99"][0]
+    assert agent_app.decrypt("PEER99", relay_call.kwargs["json"]["payload"]) == "t0k"
+
+
+def test_check_inbox_stores_relayed_secret():
+    set_code("ME1234")
+    message = {"sender": "FRIEND", "key_name": "wifi", "payload": agent_app.encrypt("ME1234", "pa55")}
+    with mock.patch.object(agent_app, "hub", return_value={"messages": [message]}):
+        agent_app.check_inbox()
+    assert agent_app.load_vault()["keys"]["wifi"]["value"] == "pa55"

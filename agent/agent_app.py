@@ -1,13 +1,16 @@
 # Cardea Agent - runs on every user's device.
 # Secrets are kept in plaintext ONLY on this device (vault.json).
 # The hub is used to find other devices; secrets are sent straight to the other device's IP,
-# encrypted with the receiver's pairing code.
+# encrypted with the receiver's pairing code. If that device can't be reached (home Wi-Fi / NAT),
+# the encrypted message waits in the hub's memory until the device collects it.
 
 import base64
 import hashlib
 import json
 import os
 import secrets
+import threading
+import time
 
 import requests
 from cryptography.fernet import Fernet
@@ -21,6 +24,7 @@ DEVICE_NAME = os.environ.get("DEVICE_NAME", "my-device")
 PUBLIC_IP = os.environ.get("PUBLIC_IP", "")  # IP other devices use to reach me (blank = hub detects it)
 PUBLIC_PORT = int(os.environ.get("PUBLIC_PORT", "5001"))
 VAULT_FILE = os.environ.get("VAULT_FILE", "vault.json")
+POLL_SECONDS = int(os.environ.get("POLL_SECONDS", "10"))  # how often to check the hub for relayed secrets
 
 SENT = Counter("cardea_secrets_sent_total", "Secrets sent to other devices")
 RECEIVED = Counter("cardea_secrets_received_total", "Secrets received from other devices")
@@ -68,9 +72,41 @@ def send_secret(key_name, value, target_code):
     vault = load_vault()
     peer = hub("GET", f"/lookup/{target_code}")
     payload = {"sender": vault["code"], "key_name": key_name, "payload": encrypt(target_code, value)}
-    requests.post(f"http://{peer['ip']}:{peer['port']}/receive", json=payload, timeout=5).raise_for_status()
-    hub("POST", "/audit", json={"actor": vault["code"], "target": target_code, "key_name": key_name, "action": "share"})
+    try:
+        # 1st choice: straight to the other device's IP
+        requests.post(f"http://{peer['ip']}:{peer['port']}/receive", json=payload, timeout=3).raise_for_status()
+        action = "share"
+    except requests.RequestException:
+        # Device is behind NAT / offline: leave the encrypted message with the hub (memory only)
+        hub("POST", f"/relay/{target_code}", json=payload)
+        action = "share_relayed"
+    hub("POST", "/audit", json={"actor": vault["code"], "target": target_code, "key_name": key_name, "action": action})
     SENT.inc()
+
+
+def store_received(data):
+    vault = load_vault()
+    value = decrypt(vault["code"], data["payload"])
+    vault["keys"][data["key_name"]] = {"value": value, "hidden": False, "shared_with": [], "from": data["sender"]}
+    save_vault(vault)
+    RECEIVED.inc()
+
+
+def check_inbox():
+    # Collect messages the hub is holding for us
+    code = load_vault()["code"]
+    if code:
+        for message in hub("GET", f"/relay/{code}")["messages"]:
+            store_received(message)
+
+
+def poll_inbox_forever():
+    while True:
+        try:
+            check_inbox()
+        except Exception as error:  # hub offline etc. - just try again later
+            print("inbox check failed:", error, flush=True)
+        time.sleep(POLL_SECONDS)
 
 
 def resolve_targets(target):
@@ -193,14 +229,12 @@ def answer_request():
 @app.post("/receive")
 def receive():
     # Another device sends us a secret directly
-    data = request.get_json()
-    vault = load_vault()
-    value = decrypt(vault["code"], data["payload"])
-    vault["keys"][data["key_name"]] = {"value": value, "hidden": False, "shared_with": [], "from": data["sender"]}
-    save_vault(vault)
-    RECEIVED.inc()
+    store_received(request.get_json())
     return jsonify(ok=True)
 
+
+if POLL_SECONDS > 0:
+    threading.Thread(target=poll_inbox_forever, daemon=True).start()
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5001)

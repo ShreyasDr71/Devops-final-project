@@ -144,6 +144,24 @@ def close_request(req_id):
     return jsonify(ok=True)
 
 
+# ---------- Relay for devices behind home Wi-Fi / NAT ----------
+# If a device can't be reached directly, the sender leaves the ENCRYPTED message here.
+# Kept in memory only (never written to disk) and deleted as soon as the device collects it.
+
+INBOX = {}
+
+
+@app.post("/relay/<code>")
+def relay_put(code):
+    INBOX.setdefault(code, []).append(request.get_json())
+    return jsonify(ok=True)
+
+
+@app.get("/relay/<code>")
+def relay_take(code):
+    return jsonify(messages=INBOX.pop(code, []))
+
+
 # ---------- Audit log ----------
 
 @app.post("/audit")

@@ -56,3 +56,9 @@ def test_audit_never_contains_secret_values():
 
 def test_metrics():
     assert b"cardea_hub_requests_total" in client.get("/metrics").data
+
+
+def test_relay_is_delivered_once_then_deleted():
+    client.post("/relay/BOB123", json={"sender": "A", "key_name": "k", "payload": "encrypted"})
+    assert client.get("/relay/BOB123").get_json()["messages"][0]["payload"] == "encrypted"
+    assert client.get("/relay/BOB123").get_json()["messages"] == []
