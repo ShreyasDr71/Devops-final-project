@@ -1,0 +1,57 @@
+# Cardea app stack that Jenkins deploys on the EC2 server.
+# hub      -> pairing + groups + audit (no secrets)
+# agent-a  -> demo device A   (http://SERVER_IP:5001)
+# agent-b  -> demo device B   (http://SERVER_IP:5002)
+# A real second device (laptop) uses device/docker-compose.yml instead.
+
+services:
+  hub:
+    build: ./hub
+    image: cardea-hub:latest
+    ports:
+      - "5000:5000"
+    volumes:
+      - hub-data:/data
+    restart: unless-stopped
+
+  agent-a:
+    build: ./agent
+    image: cardea-agent:latest
+    environment:
+      HUB_URL: http://hub:5000
+      DEVICE_NAME: device-A
+      PUBLIC_IP: ${SERVER_IP:-}
+      PUBLIC_PORT: "5001"
+      PORT: "5001"
+    ports:
+      - "5001:5001"
+    volumes:
+      - agent-a-data:/data
+    depends_on: [hub]
+    restart: unless-stopped
+
+  agent-b:
+    image: cardea-agent:latest
+    environment:
+      HUB_URL: http://hub:5000
+      DEVICE_NAME: device-B
+      PUBLIC_IP: ${SERVER_IP:-}
+      PUBLIC_PORT: "5002"
+      PORT: "5002"
+    ports:
+      - "5002:5002"
+    volumes:
+      - agent-b-data:/data
+    depends_on: [hub, agent-a]
+    restart: unless-stopped
+
+volumes:
+  hub-data:
+  agent-a-data:
+  agent-b-data:
+
+# Shared with the DevOps tools stack so Prometheus can scrape the app
+networks:
+  default:
+    name: devops
+    external: true
