@@ -44,7 +44,7 @@ def log_event(actor, target, key_name, action):
     with db() as conn:
         conn.execute("INSERT INTO audit VALUES (?, ?, ?, ?, ?)", (now, actor, target, key_name, action))
     AUDIT_EVENTS.labels(action).inc()
-    # Printed to stdout so Docker ships it to CloudWatch Logs
+    # Printed to stdout; Fluent Bit (k8s/logging.yaml) ships it to CloudWatch Logs
     print(f"AUDIT {now} {action} actor={actor} target={target} key={key_name}", flush=True)
 
 

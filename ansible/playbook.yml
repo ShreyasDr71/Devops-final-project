@@ -1,4 +1,4 @@
-# Configures the EC2 server created by Terraform.
+# Configures the EC2 server created by Terraform: Docker + DevOps tools, then k3s for the app.
 # Run from Linux/WSL:  ansible-playbook -i inventory.ini playbook.yml
 - name: Set up the Cardea server
   hosts: cardea
@@ -144,3 +144,6 @@
       until: jenkins.status == 200
       retries: 30
       delay: 10
+
+# Kubernetes for the Cardea app (Jenkins deploys to it)
+- import_playbook: k3s.yml

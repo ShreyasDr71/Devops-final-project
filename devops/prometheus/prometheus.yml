@@ -5,13 +5,14 @@ rule_files:
   - alerts.yml
 
 scrape_configs:
+  # Cardea runs in Kubernetes (k3s); its LoadBalancer services listen on the server's ports
   - job_name: cardea-hub
     static_configs:
-      - targets: ["hub:5000"]
+      - targets: ["host.docker.internal:5000"]
 
   - job_name: cardea-devices
     static_configs:
-      - targets: ["agent-a:5001", "agent-b:5002"]
+      - targets: ["host.docker.internal:5001", "host.docker.internal:5002"]
 
   - job_name: jenkins
     metrics_path: /prometheus/

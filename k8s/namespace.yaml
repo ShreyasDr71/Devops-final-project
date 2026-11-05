@@ -1,0 +1,8 @@
+# Cardea app on Kubernetes (k3s on the EC2 server).
+# Jenkins applies namespace, hub, agents and logging in that order,
+# after replacing __IMAGE_TAG__ (the build number) and __SERVER_IP__.
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: cardea

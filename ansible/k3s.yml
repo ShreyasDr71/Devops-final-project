@@ -1,0 +1,59 @@
+# Installs Kubernetes (k3s) for the Cardea app. Imported at the end of playbook.yml,
+# and can also be run on its own:  ansible-playbook k3s.yml
+- name: Install Kubernetes (k3s)
+  hosts: cardea
+  become: true
+
+  vars:
+    k3s_version: v1.36.5+k3s1
+
+  tasks:
+    - name: k3s config folder
+      ansible.builtin.file:
+        path: /etc/rancher/k3s
+        state: directory
+        mode: "0755"
+
+    - name: Let k3s pull images from the local registry Jenkins pushes to
+      ansible.builtin.copy:
+        dest: /etc/rancher/k3s/registries.yaml
+        mode: "0600"
+        content: |
+          mirrors:
+            "127.0.0.1:5050":
+              endpoint:
+                - "http://127.0.0.1:5050"
+      notify: Restart k3s
+
+    # Traefik is not needed: each Cardea service gets its own port on the server
+    - name: Install k3s
+      ansible.builtin.shell: curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION={{ k3s_version }} sh -s - --disable traefik
+      args:
+        creates: /usr/local/bin/k3s
+
+    - name: Wait until the Kubernetes node is ready
+      ansible.builtin.command: k3s kubectl wait --for=condition=Ready node --all --timeout=180s
+      changed_when: false
+
+    - name: Kubeconfig folder for Jenkins
+      ansible.builtin.file:
+        path: /var/jenkins_home/.kube
+        state: directory
+        owner: "1000"
+        group: "1000"
+        mode: "0700"
+
+    - name: Give Jenkins the kubeconfig so the pipeline can deploy
+      ansible.builtin.copy:
+        src: /etc/rancher/k3s/k3s.yaml
+        remote_src: true
+        dest: /var/jenkins_home/.kube/config
+        owner: "1000"
+        group: "1000"
+        mode: "0600"
+
+  handlers:
+    - name: Restart k3s
+      ansible.builtin.service:
+        name: k3s
+        state: restarted

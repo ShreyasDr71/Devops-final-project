@@ -1,0 +1,157 @@
+# Two demo devices running on the server: device-A on :5001 and device-B on :5002
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: agent-a-data
+  namespace: cardea
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: 1Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: agent-a
+  namespace: cardea
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels: { app: agent-a }
+  template:
+    metadata:
+      labels: { app: agent-a }
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: agent
+          image: 127.0.0.1:5050/cardea-agent:__IMAGE_TAG__
+          env:
+            - { name: HUB_URL, value: "http://hub:5000" }
+            - { name: DEVICE_NAME, value: device-A }
+            - { name: PUBLIC_IP, value: "__SERVER_IP__" }
+            - { name: PUBLIC_PORT, value: "5001" }
+            - { name: PORT, value: "5001" }
+          ports:
+            - containerPort: 5001
+          readinessProbe:
+            httpGet: { path: /health, port: 5001 }
+            periodSeconds: 5
+          livenessProbe:
+            httpGet: { path: /health, port: 5001 }
+            initialDelaySeconds: 10
+            periodSeconds: 20
+          resources:
+            requests: { cpu: 50m, memory: 64Mi }
+            limits: { cpu: 500m, memory: 256Mi }
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: [ALL] }
+          volumeMounts:
+            - { name: data, mountPath: /data }
+            - { name: tmp, mountPath: /tmp }
+      volumes:
+        - name: data
+          persistentVolumeClaim: { claimName: agent-a-data }
+        - name: tmp
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: agent-a
+  namespace: cardea
+spec:
+  type: LoadBalancer
+  selector: { app: agent-a }
+  ports:
+    - port: 5001
+      targetPort: 5001
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: agent-b-data
+  namespace: cardea
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: 1Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: agent-b
+  namespace: cardea
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels: { app: agent-b }
+  template:
+    metadata:
+      labels: { app: agent-b }
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: agent
+          image: 127.0.0.1:5050/cardea-agent:__IMAGE_TAG__
+          env:
+            - { name: HUB_URL, value: "http://hub:5000" }
+            - { name: DEVICE_NAME, value: device-B }
+            - { name: PUBLIC_IP, value: "__SERVER_IP__" }
+            - { name: PUBLIC_PORT, value: "5002" }
+            - { name: PORT, value: "5002" }
+          ports:
+            - containerPort: 5002
+          readinessProbe:
+            httpGet: { path: /health, port: 5002 }
+            periodSeconds: 5
+          livenessProbe:
+            httpGet: { path: /health, port: 5002 }
+            initialDelaySeconds: 10
+            periodSeconds: 20
+          resources:
+            requests: { cpu: 50m, memory: 64Mi }
+            limits: { cpu: 500m, memory: 256Mi }
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: [ALL] }
+          volumeMounts:
+            - { name: data, mountPath: /data }
+            - { name: tmp, mountPath: /tmp }
+      volumes:
+        - name: data
+          persistentVolumeClaim: { claimName: agent-b-data }
+        - name: tmp
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: agent-b
+  namespace: cardea
+spec:
+  type: LoadBalancer
+  selector: { app: agent-b }
+  ports:
+    - port: 5002
+      targetPort: 5002

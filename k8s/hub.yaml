@@ -1,0 +1,76 @@
+# The hub: pairing, contacts, groups, audit log and the in-memory secret relay
+---
+# hub.db (devices, pairings, groups, audit) survives restarts and redeploys
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: hub-data
+  namespace: cardea
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: 1Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hub
+  namespace: cardea
+spec:
+  # One copy only: pairing PINs and the secret relay live in the hub's memory
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels: { app: hub }
+  template:
+    metadata:
+      labels: { app: hub }
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: hub
+          image: 127.0.0.1:5050/cardea-hub:__IMAGE_TAG__
+          ports:
+            - containerPort: 5000
+          readinessProbe:
+            httpGet: { path: /health, port: 5000 }
+            periodSeconds: 5
+          livenessProbe:
+            httpGet: { path: /health, port: 5000 }
+            initialDelaySeconds: 10
+            periodSeconds: 20
+          resources:
+            requests: { cpu: 50m, memory: 64Mi }
+            limits: { cpu: 500m, memory: 256Mi }
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: [ALL] }
+          volumeMounts:
+            - { name: data, mountPath: /data }
+            - { name: tmp, mountPath: /tmp }
+      volumes:
+        - name: data
+          persistentVolumeClaim: { claimName: hub-data }
+        - name: tmp
+          emptyDir: {}
+---
+# LoadBalancer = k3s opens port 5000 on the server itself, so devices keep using http://SERVER_IP:5000
+apiVersion: v1
+kind: Service
+metadata:
+  name: hub
+  namespace: cardea
+spec:
+  type: LoadBalancer
+  selector: { app: hub }
+  ports:
+    - port: 5000
+      targetPort: 5000

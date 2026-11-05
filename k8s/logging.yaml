@@ -1,0 +1,63 @@
+# Fluent Bit ships the hub's audit log lines to CloudWatch Logs (/cardea/hub).
+# It uses the EC2 instance role from Terraform, so no AWS keys are stored here.
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: fluent-bit
+  namespace: cardea
+data:
+  fluent-bit.yaml: |
+    service:
+      flush: 5
+      log_level: warn
+    pipeline:
+      inputs:
+        - name: tail
+          path: /var/log/containers/hub-*_cardea_hub-*.log
+          tag: hub
+          multiline.parser: cri
+          refresh_interval: 5
+      outputs:
+        - name: cloudwatch_logs
+          match: hub
+          region: ap-south-1
+          log_group_name: /cardea/hub
+          log_stream_prefix: k8s-
+          log_key: log
+          auto_create_group: false
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: fluent-bit
+  namespace: cardea
+spec:
+  selector:
+    matchLabels: { app: fluent-bit }
+  template:
+    metadata:
+      labels: { app: fluent-bit }
+    spec:
+      automountServiceAccountToken: false
+      # Host network so Fluent Bit can reach the EC2 metadata service for the instance role
+      hostNetwork: true
+      containers:
+        - name: fluent-bit
+          image: fluent/fluent-bit:5.1.4
+          args: ["-c", "/fluent-bit/etc/fluent-bit.yaml"]
+          resources:
+            requests: { cpu: 10m, memory: 32Mi }
+            limits: { cpu: 200m, memory: 128Mi }
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: [ALL], add: [DAC_READ_SEARCH] }
+          volumeMounts:
+            - { name: config, mountPath: /fluent-bit/etc/fluent-bit.yaml, subPath: fluent-bit.yaml }
+            - { name: varlog, mountPath: /var/log, readOnly: true }
+      volumes:
+        - name: config
+          configMap: { name: fluent-bit }
+        - name: varlog
+          hostPath: { path: /var/log }

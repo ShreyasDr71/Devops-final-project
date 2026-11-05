@@ -3,7 +3,11 @@ pipeline {
   agent any
 
   environment {
-    COMPOSE_PROJECT_NAME = 'cardea'
+    // Local image registry (started by Ansible) that k3s pulls from
+    REGISTRY = '127.0.0.1:5050'
+    TAG = "${env.BUILD_NUMBER}"
+    // kubectl runs as a container on the host network, using the k3s kubeconfig Ansible gave Jenkins
+    KUBECTL = 'docker run --rm -i --network host --user 1000 -v /var/jenkins_home/.kube/config:/kubeconfig:ro -e KUBECONFIG=/kubeconfig rancher/kubectl:v1.36.2'
   }
 
   stages {
@@ -42,7 +46,10 @@ pipeline {
 
     stage('Build images') {
       steps {
-        sh 'docker compose build'
+        sh '''
+          docker build -t $REGISTRY/cardea-hub:$TAG hub
+          docker build -t $REGISTRY/cardea-agent:$TAG agent
+        '''
       }
     }
 
@@ -51,37 +58,52 @@ pipeline {
         sh '''
           TRIVY="docker run --rm -v /var/run/docker.sock:/var/run/docker.sock -v trivy-cache:/root/.cache aquasec/trivy:0.56.2"
 
-          for image in cardea-hub:latest cardea-agent:latest; do
+          for image in $REGISTRY/cardea-hub:$TAG $REGISTRY/cardea-agent:$TAG; do
             # Show HIGH + CRITICAL issues, but only fail on fixable CRITICAL ones
             $TRIVY image --severity HIGH,CRITICAL --ignore-unfixed "$image"
             $TRIVY image --severity CRITICAL --ignore-unfixed --exit-code 1 --quiet "$image"
           done
         '''
-        // Report misconfigurations in Dockerfiles and Terraform (does not fail the build)
+        // Report misconfigurations in Dockerfiles, Kubernetes manifests and Terraform (does not fail the build)
         sh 'docker run --rm -v "$WORKSPACE:/src" aquasec/trivy:0.56.2 config --severity HIGH,CRITICAL /src'
       }
     }
 
-    stage('Deploy') {
+    stage('Push images') {
       steps {
-        sh 'docker compose -f docker-compose.yml -f docker-compose.aws.yml up -d'
+        sh '''
+          docker push $REGISTRY/cardea-hub:$TAG
+          docker push $REGISTRY/cardea-agent:$TAG
+        '''
+      }
+    }
+
+    stage('Deploy to Kubernetes') {
+      steps {
+        sh '''
+          cat k8s/namespace.yaml k8s/hub.yaml k8s/agents.yaml k8s/logging.yaml             | sed -e "s/__IMAGE_TAG__/$TAG/g" -e "s/__SERVER_IP__/$SERVER_IP/g"             | $KUBECTL apply -f -
+          for app in hub agent-a agent-b; do
+            $KUBECTL -n cardea rollout status deployment/$app --timeout=180s
+          done
+          $KUBECTL -n cardea get pods -o wide
+        '''
       }
     }
 
     stage('Smoke test') {
       steps {
+        // Through the same ports devices use
         sh '''
-          sleep 10
-          docker run --rm --network devops curlimages/curl:8.10.1 -fsS http://hub:5000/health
-          docker run --rm --network devops curlimages/curl:8.10.1 -fsS http://agent-a:5001/health
-          docker run --rm --network devops curlimages/curl:8.10.1 -fsS http://agent-b:5002/health
+          for port in 5000 5001 5002; do
+            docker run --rm --network host curlimages/curl:8.10.1 -fsS --retry 10 --retry-delay 3 --retry-all-errors http://127.0.0.1:$port/health
+          done
         '''
       }
     }
   }
 
   post {
-    success { echo "Cardea deployed: http://${env.SERVER_IP}:5001 and http://${env.SERVER_IP}:5002" }
+    success { echo "Cardea running on Kubernetes: hub http://${env.SERVER_IP}:5000, devices :5001 and :5002" }
     failure { echo 'Build failed - check the stage that is red.' }
   }
 }

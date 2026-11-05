@@ -22,12 +22,25 @@ services:
       - sonar-extensions:/opt/sonarqube/extensions
     restart: unless-stopped
 
+  # Private image registry: Jenkins pushes app images here, k3s pulls them.
+  # Only reachable from the server itself.
+  registry:
+    image: registry:2.8.3
+    ports:
+      - "127.0.0.1:5050:5000"
+    volumes:
+      - registry-data:/var/lib/registry
+    restart: unless-stopped
+
   # ---------- Monitoring ----------
 
   prometheus:
     image: prom/prometheus:v2.54.1
     ports:
       - "9090:9090"
+    # The app runs in k3s now; Prometheus reaches it through the server's ports 5000-5002
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     volumes:
       - ./prometheus:/etc/prometheus
       - prometheus-data:/prometheus
@@ -65,12 +78,13 @@ services:
     restart: unless-stopped
 
 volumes:
+  registry-data:
   sonar-data:
   sonar-extensions:
   prometheus-data:
   grafana-data:
 
-# Created by Ansible; the app stack joins the same network
+# Created by Ansible; shared by the tools and the containers Jenkins starts
 networks:
   default:
     name: devops
