@@ -22,7 +22,7 @@ app = Flask(__name__)
 HUB_URL = os.environ.get("HUB_URL", "http://localhost:5000")
 DEVICE_NAME = os.environ.get("DEVICE_NAME", "my-device")
 PUBLIC_IP = os.environ.get("PUBLIC_IP", "")  # IP other devices use to reach me (blank = hub detects it)
-PUBLIC_PORT = int(os.environ.get("PUBLIC_PORT", "5001"))
+PUBLIC_PORT = int(os.environ.get("PUBLIC_PORT", "5002"))
 VAULT_FILE = os.environ.get("VAULT_FILE", "vault.json")
 POLL_SECONDS = int(os.environ.get("POLL_SECONDS", "10"))  # how often to check the hub for relayed secrets
 
