@@ -37,6 +37,9 @@ spec:
       containers:
         - name: hub
           image: 127.0.0.1:5050/cardea-hub:__IMAGE_TAG__
+          env:
+            # The root filesystem is read-only; gunicorn keeps its control socket under $HOME
+            - { name: HOME, value: /tmp }
           ports:
             - containerPort: 5000
           readinessProbe:
