@@ -17,3 +17,5 @@ devops/.env
 devops/.sonar_token
 .scannerwork/
 test-results.xml
+.bluegreen
+~$*

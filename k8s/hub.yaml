@@ -1,6 +1,9 @@
 # The hub: pairing, contacts, groups, audit log and the in-memory secret relay
+# Blue-green: k8s/blue-green.sh fills in __COLOR__ (the idle colour that gets this build)
+# and __LIVE_COLOR__ (the colour the public Service keeps pointing at until the switch).
 ---
-# hub.db (devices, pairings, groups, audit) survives restarts and redeploys
+# hub.db (devices, pairings, groups, audit) survives restarts and redeploys.
+# Shared by hub-blue and hub-green: on a single node a ReadWriteOnce volume can be mounted by both.
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
@@ -15,18 +18,18 @@ spec:
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: hub
+  name: hub-__COLOR__
   namespace: cardea
 spec:
-  # One copy only: pairing PINs and the secret relay live in the hub's memory
+  # One copy per colour: pairing PINs and the secret relay live in the hub's memory
   replicas: 1
   strategy:
     type: Recreate
   selector:
-    matchLabels: { app: hub }
+    matchLabels: { app: hub, color: __COLOR__ }
   template:
     metadata:
-      labels: { app: hub }
+      labels: { app: hub, color: __COLOR__ }
     spec:
       automountServiceAccountToken: false
       securityContext:
@@ -65,7 +68,8 @@ spec:
         - name: tmp
           emptyDir: {}
 ---
-# LoadBalancer = k3s opens port 5000 on the server itself, so devices keep using http://SERVER_IP:5000
+# LoadBalancer = k3s opens port 5000 on the server itself, so devices keep using http://SERVER_IP:5000.
+# Only the live colour gets this traffic; blue-green.sh switches the colour after testing the idle one.
 apiVersion: v1
 kind: Service
 metadata:
@@ -73,7 +77,20 @@ metadata:
   namespace: cardea
 spec:
   type: LoadBalancer
-  selector: { app: hub }
+  selector: { app: hub, color: __LIVE_COLOR__ }
+  ports:
+    - port: 5000
+      targetPort: 5000
+---
+# Internal address of the idle colour, used to test a new build before it gets real traffic
+apiVersion: v1
+kind: Service
+metadata:
+  name: hub-preview
+  namespace: cardea
+spec:
+  type: ClusterIP
+  selector: { app: hub, color: __COLOR__ }
   ports:
     - port: 5000
       targetPort: 5000

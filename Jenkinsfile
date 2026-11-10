@@ -78,32 +78,56 @@ pipeline {
       }
     }
 
-    stage('Deploy to Kubernetes') {
+    // ---------- Blue-green deployment (k8s/blue-green.sh) ----------
+    // The new build goes to the idle colour while users stay on the live one.
+
+    stage('Deploy to idle colour') {
       steps {
-        sh '''
-          cat k8s/namespace.yaml k8s/hub.yaml k8s/agents.yaml k8s/logging.yaml             | sed -e "s/__IMAGE_TAG__/$TAG/g" -e "s/__SERVER_IP__/$SERVER_IP/g"             | $KUBECTL apply -f -
-          for app in hub agent-a agent-b; do
-            $KUBECTL -n cardea rollout status deployment/$app --timeout=180s
-          done
-          $KUBECTL -n cardea get pods -o wide
-        '''
+        sh 'sh k8s/blue-green.sh deploy'
+      }
+    }
+
+    stage('Test idle colour') {
+      steps {
+        // Health check through the <app>-preview Services, before any user traffic
+        sh 'sh k8s/blue-green.sh test'
+      }
+    }
+
+    stage('Switch traffic') {
+      steps {
+        sh 'sh k8s/blue-green.sh switch'
       }
     }
 
     stage('Smoke test') {
       steps {
-        // Through the same ports devices use
+        // Through the same ports devices use, now served by the new colour
         sh '''
           for port in 5000 5001 5002; do
             docker run --rm --network host curlimages/curl:8.10.1 -fsS --retry 10 --retry-delay 3 --retry-all-errors http://127.0.0.1:$port/health
           done
         '''
       }
+      post {
+        // The old colour is still running at this point, so rolling back is instant
+        failure { sh 'sh k8s/blue-green.sh rollback' }
+      }
+    }
+
+    stage('Retire old colour') {
+      steps {
+        // Scaled to 0, not deleted: 'sh k8s/blue-green.sh rollback' can bring it back
+        sh 'sh k8s/blue-green.sh retire'
+      }
     }
   }
 
   post {
-    success { echo "Cardea running on Kubernetes: hub http://${env.SERVER_IP}:5000, devices :5001 and :5002" }
+    success {
+      sh 'sh k8s/blue-green.sh status'
+      echo "Cardea running on Kubernetes: hub http://${env.SERVER_IP}:5000, devices :5001 and :5002"
+    }
     failure { echo 'Build failed - check the stage that is red.' }
   }
 }
