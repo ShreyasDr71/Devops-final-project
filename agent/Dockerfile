@@ -15,4 +15,4 @@ ENV VAULT_FILE=/data/vault.json
 ENV PORT=5001
 EXPOSE 5001
 HEALTHCHECK CMD python -c "import os, urllib.request as u; u.urlopen('http://localhost:' + os.environ['PORT'] + '/health')"
-CMD gunicorn -b 0.0.0.0:$PORT -w 1 agent_app:app
+CMD gunicorn -b 0.0.0.0:$PORT -w 1 -k gthread --threads 8 agent_app:app
