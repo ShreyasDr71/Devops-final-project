@@ -17,6 +17,9 @@ DB_FILE = os.environ.get("HUB_DB", "hub.db")
 # Prometheus metrics
 REQUESTS = Counter("cardea_hub_requests_total", "Requests handled by the hub", ["endpoint"])
 AUDIT_EVENTS = Counter("cardea_audit_events_total", "Audit events recorded", ["action"])
+# Start each known action at 0, so Prometheus sees the first event as an increase (0 -> 1) after a restart
+for _action in ("register", "pair", "unpair", "create_group", "request_key", "share_relayed", "rotate", "forget_device"):
+    AUDIT_EVENTS.labels(_action)
 DEVICES = Counter("cardea_devices_registered_total", "Devices registered")
 
 
