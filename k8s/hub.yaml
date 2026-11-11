@@ -43,6 +43,9 @@ spec:
           env:
             # The root filesystem is read-only; gunicorn keeps its control socket under $HOME
             - { name: HOME, value: /tmp }
+            # Shown by /health so you can see which colour and build is answering
+            - { name: COLOR, value: __COLOR__ }
+            - { name: BUILD, value: "__IMAGE_TAG__" }
           ports:
             - containerPort: 5000
           readinessProbe:

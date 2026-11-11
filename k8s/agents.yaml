@@ -43,6 +43,8 @@ spec:
             - { name: PUBLIC_PORT, value: "5001" }
             - { name: PORT, value: "5001" }
             - { name: HOME, value: /tmp }  # read-only root filesystem; gunicorn writes under $HOME
+            - { name: COLOR, value: __COLOR__ }  # shown by /health
+            - { name: BUILD, value: "__IMAGE_TAG__" }
           ports:
             - containerPort: 5001
           readinessProbe:
@@ -134,6 +136,8 @@ spec:
             - { name: PUBLIC_PORT, value: "5002" }
             - { name: PORT, value: "5002" }
             - { name: HOME, value: /tmp }  # read-only root filesystem; gunicorn writes under $HOME
+            - { name: COLOR, value: __COLOR__ }  # shown by /health
+            - { name: BUILD, value: "__IMAGE_TAG__" }
           ports:
             - containerPort: 5002
           readinessProbe:

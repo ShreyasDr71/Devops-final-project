@@ -136,7 +136,8 @@ def index():
 
 @app.get("/health")
 def health():
-    return jsonify(status="ok")
+    # COLOR and BUILD are set by the Kubernetes manifest, so you can see which blue-green colour answered
+    return jsonify(status="ok", color=os.environ.get("COLOR", "local"), build=os.environ.get("BUILD", "dev"))
 
 
 @app.get("/metrics")

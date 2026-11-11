@@ -60,7 +60,7 @@ def test_hidden_key_request_is_denied():
 
 
 def test_health():
-    assert client.get("/health").get_json() == {"status": "ok"}
+    assert client.get("/health").get_json() == {"status": "ok", "color": "local", "build": "dev"}
 
 
 def test_home_page_works_when_hub_is_offline():

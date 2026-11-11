@@ -13,7 +13,7 @@ def register(name):
 
 
 def test_health():
-    assert client.get("/health").get_json() == {"status": "ok"}
+    assert client.get("/health").get_json() == {"status": "ok", "color": "local", "build": "dev"}
 
 
 def test_register_and_lookup():
