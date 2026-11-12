@@ -58,6 +58,8 @@
     .tag.hidden { background: #f3e3d3; color: #7a4a1c; }
     .mono { font-family: Consolas, monospace; }
     details summary { cursor: pointer; color: var(--accent); }
+    .filter { padding: 3px 7px; border: 1px solid #b9bfc5; border-radius: 2px; font: inherit; width: 200px; margin-left: auto; margin-right: 10px; }
+    .filter:focus { outline: none; border-color: var(--accent); }
 
     @media (max-width: 700px) {
       nav { display: none; }
@@ -104,11 +106,11 @@
       {% endif %}
 
       <div class="panel" id="secrets">
-        <div class="panel-head"><h2>Secrets (stored on this device only)</h2><span class="tag">{{ vault['keys'] | length }} records</span></div>
-        <table>
+        <div class="panel-head"><h2>Secrets (stored on this device only)</h2><input type="search" id="secret-filter" class="filter" placeholder="Filter by name" aria-label="Filter secrets by name"><span class="tag">{{ vault['keys'] | length }} records</span></div>
+        <table id="secrets-table">
           <tr><th>Name</th><th>Value</th><th>Visibility</th><th>Shared with</th><th>Received from</th><th></th></tr>
           {% for key_name, key in vault['keys'].items() %}
-          <tr>
+          <tr class="secret-row" data-name="{{ key_name | lower }}">
             <td class="mono">{{ key_name }}</td>
             <td><details><summary>Show</summary><span class="mono">{{ key.value }}</span></details></td>
             <td>{% if key.hidden %}<span class="tag hidden">Hidden</span>{% else %}<span class="tag">Requestable</span>{% endif %}</td>
@@ -210,5 +212,17 @@
       </div>
     </main>
   </div>
+  <script>
+    (function () {
+      var box = document.getElementById("secret-filter");
+      if (!box) return;
+      box.addEventListener("input", function () {
+        var q = box.value.trim().toLowerCase();
+        document.querySelectorAll("#secrets-table .secret-row").forEach(function (row) {
+          row.style.display = row.getAttribute("data-name").indexOf(q) === -1 ? "none" : "";
+        });
+      });
+    })();
+  </script>
 </body>
 </html>
